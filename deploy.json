@@ -1,8 +1,7 @@
 {
     "products": {
-        "FL": "15.0.0", 
-        "IDT": "16.0.0", 
-        "MDB": "1.2.3.4.5"
+        "myprod": "9", 
+        "prod1": "000"
     }, 
-    "site": "DPCE"
+    "site": "unknown"
 }

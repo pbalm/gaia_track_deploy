@@ -18,6 +18,7 @@ from jinja2 import Environment, FileSystemLoader, Markup
 # My imports
 import json
 import re
+import os
 
 # This class is adapted from the Shortly example in the WerkZeug docs.
 # For explanations on the plumbing, please see:
@@ -27,13 +28,13 @@ def get_hostname(url):
     return urlparse.urlparse(url).netloc
 
 class TrackDeploySvc(object):
-    
+
     def __init__(self):
         template_path = os.path.join(os.path.dirname(__file__), 'templates')
         self.jinja_env = Environment(loader=FileSystemLoader(template_path),
                                      autoescape=True)
         self.jinja_env.filters['hostname'] = get_hostname
-        
+
         # Define the routing of incoming URLs to methods in this class that handle the
         # requests
         self.url_map = Map([
@@ -41,25 +42,50 @@ class TrackDeploySvc(object):
             Rule('/track_deploy/', endpoint='product_table'),
             Rule('/track_deploy/deploy', endpoint='deploy'),
         ])
-        
+
     def on_product_table(self, request):
-		f = open("deploy.json", 'r')
-		data = json.load(f)
-		deploy = data["products"]
-		table = '<table><tr>\n'
-		for k,v in deploy.iteritems():
-			table = table + '\t<td>' + k + '</td><td>' + v + '</td></tr>\n'
-		table = table + '</tr></table>\n'
-		return self.render_template('product_table.html', site=data['site'], product_table=Markup(table))
         
+        try:
+            f = open("deploy.json", 'r')
+            data = json.load(f)
+            f.close()
+        except:
+            # File doesn't exist? Create an initial placeholder:
+            data = { 'site' : 'unknown', 'products' : { 'prod1' : '000' } }
+            self.write_json(data)
+        
+        table = self.build_table(data["products"])
+        return self.render_template('product_table.html', site=data['site'], product_table=Markup(table))
+
+    def build_table(self, products):
+        table = '<table><tr>\n'
+        for k in sorted(products.iterkeys()):
+            table = table + '\t<td>' + k + '</td><td> <small>version</small> </td><td>' + products[k] + '</td></tr>\n'
+        table = table + '</tr></table>\n'
+        return table
+        
+    def write_json(self, data):
+        f = open("deploy.json", 'w')
+        json.dump(data, f, sort_keys=True, indent=4)
+        f.close()
+    
     # A new artifact is deployed
     def on_deploy(self, request):
-        
+
         product = request.args.get('product', None)
         version = request.args.get('version', None)
-        data = None
-        return Response(data.to_json(), mimetype='application/json')
-	
+
+        # Read existing data, add this product or update the version,
+        # write data
+        f = open("deploy.json", 'r')
+        data = json.load(f)
+        f.close()
+        data['products'][product] = version
+        self.write_json(data)
+
+        table = self.build_table({ product : version })
+        return self.render_template('ack_deploy.html', site=data['site'], product_table=Markup(table))
+
     def render_template(self, template_name, **context):
         t = self.jinja_env.get_template(template_name)
         return Response(t.render(context), mimetype='text/html')
@@ -73,7 +99,7 @@ class TrackDeploySvc(object):
             return getattr(self, 'on_' + endpoint)(request, **values)
         except HTTPException, e:
             return e
-	
+
     def wsgi_app(self, environ, start_response):
         request = Request(environ)
         response = self.dispatch_request(request)
@@ -94,7 +120,7 @@ def create_app(with_static=True):
     return app
 
 if __name__ == '__main__':
-	
+
     from werkzeug.serving import run_simple
     app = create_app()
     run_simple('127.0.0.1', 5000, app, use_debugger=True, use_reloader=True)
