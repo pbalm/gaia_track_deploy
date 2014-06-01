@@ -1,0 +1,9 @@
+{% extends "layout.html" %}
+{% block title %}{{ site }} Deployment of Products{% endblock %}
+{% block body %}
+
+<p>The following products was just deployed at {{ site }}:</p>
+
+{{ product_table }}
+      
+{% endblock %}
